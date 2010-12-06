@@ -6,6 +6,7 @@ import java.io.PrintWriter;
 import java.net.Socket;
 
 import android.app.Activity;
+import android.app.AlertDialog.Builder;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
@@ -20,6 +21,13 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.View.OnClickListener;
 
+import com.facebook.android.AsyncFacebookRunner;
+import com.facebook.android.DialogError;
+import com.facebook.android.Facebook;
+import com.facebook.android.FacebookError;
+import com.facebook.android.R;
+import com.facebook.android.Facebook.DialogListener;
+
 
 /**
  * This class is the main class for the FacebookPhotoLocations app. It provides
@@ -33,8 +41,7 @@ import android.view.View.OnClickListener;
  * - http://www.herongyang.com/encoding/Base64-Sun-Java-Implementation.html
  * - http://www.hcilab.org/documents/tutorials/PictureTransmissionOverHTTP/index.html
  */
-public class FacebookPhotoLocations extends Activity 
-									implements SurfaceHolder.Callback, OnClickListener
+public class CopyOfFacebookPhotoLocationMap extends Activity implements SurfaceHolder.Callback, OnClickListener
 {
 	static final int MODE = 0;
 	public static final String TAG = "FacebookPhotoLocations";
@@ -43,6 +50,15 @@ public class FacebookPhotoLocations extends Activity
 	Camera camera;
 	boolean isPreviewRunning = false;
 	private Context context = this;
+	
+	// Facebook stuff
+	public static final String APP_ID = "178069788885403";
+	private static final String[] PERMISSIONS =
+        new String[] { " " };
+	private static Facebook facebook;
+	private AsyncFacebookRunner asyncRunner;
+	public static String facebookUserId;	// currently a global variable, not the best practice...
+
 	
 	// Provides location information to be sent with the pictures
 	PhotoLocation location = null;
@@ -57,6 +73,9 @@ public class FacebookPhotoLocations extends Activity
 		Log.i( TAG, "Reaches onCreate()..." );
 
 		Bundle extras = getIntent().getExtras();
+		
+		// Set up Facebook stuff
+		setupFacebook();
 		
 		// The following is needed to get location information for the photos
 		LocationManager manager = (LocationManager)getSystemService( Context.LOCATION_SERVICE );
@@ -74,6 +93,36 @@ public class FacebookPhotoLocations extends Activity
 		mSurfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 	}
 	
+	protected void setupFacebook()
+	{
+		// DEBUG
+		Log.i( TAG, "Reaches setupFacebook()..." );
+		
+		if (APP_ID == null) 
+		{
+            Builder alertBuilder = new Builder(this);
+            alertBuilder.setTitle("Warning");
+            alertBuilder.setMessage("A Facebook Applicaton ID must be " +
+                    "specified before running this example: " +
+                    "see FacebookPhotoLocationMap.java");
+            alertBuilder.create().show();
+        }
+		
+		Facebook facebook = new Facebook( APP_ID );
+		facebook.authorize( this, PERMISSIONS, Facebook.FORCE_DIALOG_AUTH, new AuthorizeListener() ); 
+	}
+	
+	// Currently should not be called because not doing single sign-on...
+	@Override
+	public void onActivityResult(int requestCode, int resultCode, Intent data)
+	{
+	    Log.i( TAG, "Reaches onActivityResult()..." );
+	    
+	    super.onActivityResult(requestCode, resultCode, data);
+	    facebook.authorizeCallback(requestCode, resultCode, data);   
+	}
+
+	
 	@Override
 	protected void onRestoreInstanceState(Bundle savedInstanceState) {
 		super.onRestoreInstanceState(savedInstanceState);
@@ -85,6 +134,19 @@ public class FacebookPhotoLocations extends Activity
 		{
 			Log.i( TAG, "reaches onPictureTaken()..." );
 
+			// Get FacebookID
+			try
+		    {
+		        String accessToken = facebook.getAccessToken();	
+		        Log.i( TAG, "Access Token: " + accessToken );
+		    }
+		    catch( Exception e )
+		    {
+		    	Log.e( TAG, "Error requesting Facebook information..." );
+		    	Log.e( TAG, e.toString() );
+		    	System.exit( 1 );
+		    }
+		    
 			if ( imageData != null ) 
 			{
 				Intent intent = new Intent();
@@ -237,7 +299,36 @@ public class FacebookPhotoLocations extends Activity
 		camera.takePicture(null, pictureCallback, pictureCallback);
 
 	}
+	
+	// -------------------------------------------------------------------------
+	// Facebook classes
+	class AuthorizeListener implements DialogListener 
+	{
+		  public void onComplete(Bundle values) 
+		  {
+		      //  Handle a successful login
+			  Log.i( TAG, "reaches AuthorizeListener.onComplete().." );
+		  }
 
+		public void onCancel() 
+		{
+			Log.e( TAG, "Reaches AuthorizeListener.onCancel()..." );			
+		}
+
+		public void onError(DialogError e) 
+		{
+			
+			Log.e( TAG, "AuthorizeListener.onError(): " + e );
+		}
+
+		public void onFacebookError(FacebookError e)
+		{
+			Log.e( TAG, "AuthorizeListener.onFacebookError()..." + e );
+			
+		}
+	}
+   
+
+
+	 
 }
-
-

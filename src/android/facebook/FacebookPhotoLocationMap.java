@@ -5,13 +5,18 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import android.app.Activity;
+import android.app.AlertDialog.Builder;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.PixelFormat;
 import android.hardware.Camera;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -19,6 +24,14 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.View.OnClickListener;
+
+import com.facebook.android.AsyncFacebookRunner;
+import com.facebook.android.DialogError;
+import com.facebook.android.Facebook;
+import com.facebook.android.FacebookError;
+import com.facebook.android.R;
+import com.facebook.android.Util;
+import com.facebook.android.Facebook.DialogListener;
 
 
 /**
@@ -33,8 +46,7 @@ import android.view.View.OnClickListener;
  * - http://www.herongyang.com/encoding/Base64-Sun-Java-Implementation.html
  * - http://www.hcilab.org/documents/tutorials/PictureTransmissionOverHTTP/index.html
  */
-public class FacebookPhotoLocations extends Activity 
-									implements SurfaceHolder.Callback, OnClickListener
+public class FacebookPhotoLocationMap extends Activity implements SurfaceHolder.Callback, OnClickListener
 {
 	static final int MODE = 0;
 	public static final String TAG = "FacebookPhotoLocations";
@@ -43,6 +55,16 @@ public class FacebookPhotoLocations extends Activity
 	Camera camera;
 	boolean isPreviewRunning = false;
 	private Context context = this;
+	
+	// Facebook stuff
+	public static final String APP_ID = "178069788885403";
+	private static final String[] PERMISSIONS =
+        new String[] { " " };
+	private static Facebook facebook;
+	private AsyncFacebookRunner asyncRunner;
+	private static String facebookUserId;
+	private Handler handler;
+
 	
 	// Provides location information to be sent with the pictures
 	PhotoLocation location = null;
@@ -57,6 +79,9 @@ public class FacebookPhotoLocations extends Activity
 		Log.i( TAG, "Reaches onCreate()..." );
 
 		Bundle extras = getIntent().getExtras();
+		
+		// Set up Facebook stuff
+		setupFacebook();
 		
 		// The following is needed to get location information for the photos
 		LocationManager manager = (LocationManager)getSystemService( Context.LOCATION_SERVICE );
@@ -74,6 +99,48 @@ public class FacebookPhotoLocations extends Activity
 		mSurfaceHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
 	}
 	
+	protected void setupFacebook()
+	{
+		// DEBUG
+		Log.i( TAG, "Reaches setupFacebook()..." );
+		
+		if (APP_ID == null) 
+		{
+            Builder alertBuilder = new Builder(this);
+            alertBuilder.setTitle("Warning");
+            alertBuilder.setMessage("A Facebook Applicaton ID must be " +
+                    "specified before running this example: " +
+                    "see FacebookPhotoLocationMap.java");
+            alertBuilder.create().show();
+        }
+
+		Facebook facebook = new Facebook( APP_ID );
+		asyncRunner = new AsyncFacebookRunner( facebook );
+		
+		if( facebook.isSessionValid() )
+		{
+			Log.i(TAG, "Session Key Valid." );
+			SessionEvents.onLogoutBegin();
+            asyncRunner.logout( context, new LogoutRequestListener());
+		}
+		else 
+		{
+			Log.i(TAG, "Session Key Invalid..." );
+			facebook.authorize( this, PERMISSIONS, Facebook.FORCE_DIALOG_AUTH, new LoginDialogListener() ); 
+		}
+	}
+	
+	// Currently should not be called because not doing single sign-on...
+	@Override
+	public void onActivityResult(int requestCode, int resultCode, Intent data)
+	{
+	    Log.i( TAG, "Reaches onActivityResult()..." );
+	    
+	    super.onActivityResult(requestCode, resultCode, data);
+	    facebook.authorizeCallback(requestCode, resultCode, data);   
+	}
+
+	
 	@Override
 	protected void onRestoreInstanceState(Bundle savedInstanceState) {
 		super.onRestoreInstanceState(savedInstanceState);
@@ -84,7 +151,7 @@ public class FacebookPhotoLocations extends Activity
 		public void onPictureTaken(byte[] imageData, Camera c) 
 		{
 			Log.i( TAG, "reaches onPictureTaken()..." );
-
+		    
 			if ( imageData != null ) 
 			{
 				Intent intent = new Intent();
@@ -135,15 +202,21 @@ public class FacebookPhotoLocations extends Activity
 
             	Log.i( TAG, "Sending this KML information to server..." );
             	Log.i( TAG, location.getKMLString() );
-
             	out.write( "\n".getBytes() );	// new line necessary for proper parsing
             	out.write( location.getKMLString().getBytes() );
             	out.flush();
 
+            	Log.i(TAG, "Sending this Facebook ID to server: " + facebookUserId );
+            	out.write( "\n".getBytes() );
+            	String idString = "facebookid:" + facebookUserId;
+            	out.write( idString.getBytes() );
+            	out.flush();
+            	
+            	// Close streams
             	out.close();
             	socket.close();
             	
-            	Log.i( TAG, "Photo and KML sent to server..." );
+            	Log.i( TAG, "Photo, KML, and Facebook ID sent to server..." );
             	
             	// DECIDE HERE IF YOU WANT TO TAKE MORE PICTURES OR NOT
             	// FOR NOW, JUST KEEP TAKING THEM...
@@ -237,7 +310,79 @@ public class FacebookPhotoLocations extends Activity
 		camera.takePicture(null, pictureCallback, pictureCallback);
 
 	}
+	
+	// -------------------------------------------------------------------------
+	// Facebook classes
+	public class IdRequestListener extends BaseRequestListener 
+    {
+        public void onComplete(final String response) 
+        {
+        	Log.i( TAG, "Reaches IdRequestListener.onComplete()..." );
+        	Log.i( TAG, "Response: " + response );
+            try 
+            {
+                // process the response here: executed in background thread
+                Log.d("Facebook-Example", "Response: " + response.toString());
+                JSONObject json = Util.parseJson(response);
+                final String userId = json.getString("id");
+                
+                // Set the facebook user id variable to send to the server
+                // along with the picture and kml entry.
+                facebookUserId = userId;
+                Log.i( TAG, "User Id: " + userId );
+                
+            } 
+            catch (JSONException e)
+            {
+                Log.w("Facebook-Example", "JSON Error in response");
+            }
+            catch (FacebookError e) 
+            {
+                Log.w("Facebook-Example", "Facebook Error: " + e.getMessage());
+            }
+            
+            Log.i(TAG, "Leaving IdRequestListener.onComplete()..." );
+        }
+    }
+	
+	private final class LoginDialogListener implements DialogListener {
+        public void onComplete(Bundle values) {
+            SessionEvents.onLoginSuccess();
+            Log.i( TAG, "Successfully logged in..." );
+    		
+    		// Set user id
+    		asyncRunner.request( "me", new IdRequestListener() );
+        }
 
+        public void onFacebookError(FacebookError error) {
+            SessionEvents.onLoginError(error.getMessage());
+            Log.i( TAG, "Error logging in: " + error.getMessage() );
+        }
+        
+        public void onError(DialogError error) {
+            SessionEvents.onLoginError(error.getMessage());
+        }
+
+        public void onCancel() {
+            SessionEvents.onLoginError("Action Canceled");
+        }
+    }
+	
+	private class LogoutRequestListener extends BaseRequestListener {
+        public void onComplete(String response) 
+        {
+        	Log.i(TAG, "Reaches LogoutRequestListener.onComplete()..." );
+        	
+            // callback should be run in the original thread, 
+            // not the background thread
+            handler.post(new Runnable() {
+                public void run() {
+                    SessionEvents.onLogoutFinish();
+                }
+            });
+        }
+    }
+
+
+	 
 }
-
-

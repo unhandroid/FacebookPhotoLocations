@@ -15,7 +15,7 @@ import android.util.Log;
 public class PhotoLocation 
 {
 	// Constants
-	static final String TAG = FacebookPhotoLocations.TAG;
+	static final String TAG = FacebookPhotoLocationMap.TAG;
 	
 	LocationManager locationManager = null;
 	Location location = null;
@@ -90,7 +90,7 @@ public class PhotoLocation
 		    double lon = location.getLongitude();
 		    double alt = location.getAltitude();
 		    
-		    sb.append( "kml:" ).append( lon ).append( "," );
+		    sb.append( "kmlString:" ).append( lon ).append( "," );
 		    sb.append( lat ).append( "," ).append( alt );		    
 		}
 		else

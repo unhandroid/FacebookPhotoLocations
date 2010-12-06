@@ -66,27 +66,31 @@ public class Server
             }
 
             out = new PrintWriter(clientSocket.getOutputStream(), true);
-            in = new BufferedReader(
-                                    new InputStreamReader(
+            in = new BufferedReader( new InputStreamReader(
                                           clientSocket.getInputStream()));
             
             System.out.println( "Reading in picture information..." );
             String inputLine;
             StringBuilder pictureBuffer = new StringBuilder();
             String kmlLine = null;
+            String facebookId = null;
             KMLEntry kmlEntry = null;
             while( ( inputLine = in.readLine() ) != null )
             {
-                pictureBuffer.append( inputLine );
+            	if( inputLine.startsWith( "kmlString:" ) )
+            	{
+            		kmlLine = inputLine.replace( "kmlString:", "" );
+            		kmlEntry = createKMLEntry( kmlLine ); 
+            	}
+                else if( inputLine.startsWith( "facebookid:") )
+                {
+                        facebookId = inputLine.replace( "facebookid:", "" ); 
+                }
+            	else
+                {
+            		pictureBuffer.append( inputLine );
+                }
             }
-            
-            // wait for kml line
-            /*while( ( kmlLine = in.readLine() ) != null )
-            {
-        		// should come AFTER the photo bytes
-        		System.out.println( "Received KML Line: " + kmlLine );
-        		kmlEntry = createKMLEntry( kmlLine );           		
-            }*/
             
             String pictureString = pictureBuffer.toString();
                 
@@ -103,9 +107,10 @@ public class Server
             in.close();
             clientSocket.close();
             
-            // THIS IS NOT RECEIVING THE KML STUFF FOR SOME REASON...
-            /*System.out.println( "Picture received with the following KML entry:" );
-            System.out.println( kmlEntry.toString() );*/
-       }
+            // DEBUG
+            System.out.println( "Picture received with the following KML entry:" );
+            System.out.println( kmlEntry.toString() );
+            System.out.println( "And the following facebook id: " + facebookId );
+        }
     }
 }
