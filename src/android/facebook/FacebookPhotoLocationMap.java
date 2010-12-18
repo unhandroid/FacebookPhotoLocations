@@ -48,10 +48,12 @@ import com.facebook.android.Facebook.DialogListener;
  */
 public class FacebookPhotoLocationMap extends Activity implements SurfaceHolder.Callback, OnClickListener
 {
+	// Connect and send photo to this server
+	private static final String SERVER_NAME = "cisunix.unh.edu";
+	private static final int PORT = 8877;
+	
 	static final int MODE = 0;
 	public static final String TAG = "FacebookPhotoLocations";
-	private static final String photosLocation = "http://cisunix.unh.edu/~mbv4/photos";
-	private static final String photoFileName = "FBPhotoLocationTest.jpg";
 	Camera camera;
 	boolean isPreviewRunning = false;
 	private Context context = this;
@@ -189,7 +191,7 @@ public class FacebookPhotoLocationMap extends Activity implements SurfaceHolder.
         	// send the string to the server
         	OutputStream out;
         	PrintWriter stringOut;
-        	Socket socket = new Socket( "agate.cs.unh.edu", 8877 );      
+        	Socket socket = new Socket( SERVER_NAME, PORT );      // make sure to gauss.cisunix.unh.edu
             out = socket.getOutputStream();
             
             		
